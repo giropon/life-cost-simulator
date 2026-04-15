@@ -16,7 +16,9 @@ import { formatYen } from '../../utils/calculations'
 
 const COLORS = ['#6366f1', '#22d3ee', '#f59e0b', '#10b981', '#f43f5e']
 
-const LABELS: Record<keyof Omit<MonthlySummary, 'total'>, string> = {
+type CostKey = 'fixedCosts' | 'weekly' | 'monthlyEvents' | 'annualEvents' | 'irregularEvents'
+
+const LABELS: Record<CostKey, string> = {
   fixedCosts: '固定費',
   weekly: '週次スケジュール',
   monthlyEvents: '月次イベント',
@@ -32,7 +34,7 @@ interface Props {
 const MONTH_NAMES = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
 
 export default function CostBreakdownChart({ summary, monthlyBreakdown }: Props) {
-  const pieData = (Object.keys(LABELS) as (keyof Omit<MonthlySummary, 'total'>)[])
+  const pieData = (Object.keys(LABELS) as CostKey[])
     .filter((k) => summary[k] > 0)
     .map((k, i) => ({
       name: LABELS[k],

@@ -53,7 +53,17 @@ export interface IrregularEvent {
   intervalMonths: number
 }
 
-export type TabKey = 'fixed' | 'weekly' | 'monthly' | 'annual' | 'irregular' | 'summary'
+export interface Income {
+  id: string
+  name: string
+  amount: number
+  /** monthly: 毎月, yearly: 毎年, specific_month: 指定月 */
+  frequency: 'monthly' | 'yearly' | 'specific_month'
+  /** frequency が 'specific_month' のときの月 (1-12) */
+  month?: number
+}
+
+export type TabKey = 'fixed' | 'weekly' | 'monthly' | 'annual' | 'irregular' | 'income' | 'summary'
 
 export const DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'] as const
 

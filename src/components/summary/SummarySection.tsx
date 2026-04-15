@@ -14,10 +14,18 @@ const CATEGORY_LABELS = {
   irregularEvents: { label: '不定期イベント', icon: '✨', color: 'bg-rose-500' },
 } as const
 
-export default function SummarySection() {
-  const { fixedCosts, schedules, monthlyEvents, annualEvents, irregularEvents } = useCostStore()
+function formatMan(amount: number): string {
+  const man = amount / 10000
+  if (Math.abs(man) >= 1) {
+    return `${Math.round(man * 10) / 10}万円`
+  }
+  return `${Math.round(amount).toLocaleString('ja-JP')}円`
+}
 
-  const summary = calcMonthlySummary(fixedCosts, schedules, monthlyEvents, annualEvents, irregularEvents)
+export default function SummarySection() {
+  const { fixedCosts, schedules, monthlyEvents, annualEvents, irregularEvents, incomes } = useCostStore()
+
+  const summary = calcMonthlySummary(fixedCosts, schedules, monthlyEvents, annualEvents, irregularEvents, incomes)
   const breakdown = calcMonthlyBreakdown(fixedCosts, schedules, monthlyEvents, annualEvents, irregularEvents)
 
   const isEmpty = summary.total === 0
@@ -39,16 +47,60 @@ export default function SummarySection() {
           {/* メインの合計 */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl p-4 text-white">
-              <p className="text-xs font-medium opacity-80 mb-1">月額合計</p>
+              <p className="text-xs font-medium opacity-80 mb-1">支出合計（月額）</p>
               <p className="text-2xl font-bold">{formatYen(summary.total)}</p>
               <p className="text-xs opacity-70 mt-1">/ 月</p>
             </div>
             <div className="bg-gradient-to-br from-slate-700 to-slate-800 rounded-xl p-4 text-white">
-              <p className="text-xs font-medium opacity-80 mb-1">年額合計</p>
+              <p className="text-xs font-medium opacity-80 mb-1">支出合計（年額）</p>
               <p className="text-2xl font-bold">{formatYen(summary.total * 12)}</p>
               <p className="text-xs opacity-70 mt-1">/ 年</p>
             </div>
           </div>
+
+          {/* 収入・収支バランス */}
+          {summary.income > 0 && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl p-4 text-white">
+                  <p className="text-xs font-medium opacity-80 mb-1">収入合計（月額）</p>
+                  <p className="text-2xl font-bold">{formatYen(summary.income)}</p>
+                  <p className="text-xs opacity-70 mt-1">/ 月</p>
+                </div>
+                <div className="bg-gradient-to-br from-emerald-700 to-emerald-800 rounded-xl p-4 text-white">
+                  <p className="text-xs font-medium opacity-80 mb-1">収入合計（年額）</p>
+                  <p className="text-2xl font-bold">{formatYen(summary.income * 12)}</p>
+                  <p className="text-xs opacity-70 mt-1">/ 年</p>
+                </div>
+              </div>
+
+              <div className={`rounded-xl p-4 ${summary.balance >= 0 ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`text-sm font-semibold ${summary.balance >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                    {summary.balance >= 0 ? '💚 収支バランス' : '⚠️ 収支バランス'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className={`text-xs mb-0.5 ${summary.balance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      毎月の{summary.balance >= 0 ? '余裕額' : '不足額'}
+                    </p>
+                    <p className={`text-xl font-bold ${summary.balance >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                      {formatMan(Math.abs(summary.balance))}
+                    </p>
+                  </div>
+                  <div>
+                    <p className={`text-xs mb-0.5 ${summary.balance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      毎年の{summary.balance >= 0 ? '余裕額' : '不足額'}
+                    </p>
+                    <p className={`text-xl font-bold ${summary.balance >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                      {formatMan(Math.abs(summary.balance * 12))}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* カテゴリ別内訳 */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">

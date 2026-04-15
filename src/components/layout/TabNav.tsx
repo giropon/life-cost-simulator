@@ -6,6 +6,7 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: 'monthly', label: '月次イベント', icon: '🗓️' },
   { key: 'annual', label: '年次イベント', icon: '🎉' },
   { key: 'irregular', label: '不定期イベント', icon: '✨' },
+  { key: 'income', label: '収入', icon: '💰' },
   { key: 'summary', label: 'サマリー', icon: '📊' },
 ]
 

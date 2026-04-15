@@ -7,6 +7,7 @@ import WeeklyScheduleSection from './components/weekly-schedule/WeeklyScheduleSe
 import MonthlyEventsSection from './components/events/MonthlyEventsSection'
 import AnnualEventsSection from './components/events/AnnualEventsSection'
 import IrregularEventsSection from './components/events/IrregularEventsSection'
+import IncomeSection from './components/income/IncomeSection'
 import SummarySection from './components/summary/SummarySection'
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
         {activeTab === 'monthly' && <MonthlyEventsSection />}
         {activeTab === 'annual' && <AnnualEventsSection />}
         {activeTab === 'irregular' && <IrregularEventsSection />}
+        {activeTab === 'income' && <IncomeSection />}
         {activeTab === 'summary' && <SummarySection />}
       </main>
     </div>

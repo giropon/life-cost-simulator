@@ -8,6 +8,7 @@ import type {
   AnnualEvent,
   IrregularEvent,
   Activity,
+  Income,
 } from '../types'
 
 const DEFAULT_SCHEDULES: DaySchedule[] = [0, 1, 2, 3, 4, 5, 6].map((d) => ({
@@ -21,6 +22,7 @@ interface CostStore {
   monthlyEvents: MonthlyEvent[]
   annualEvents: AnnualEvent[]
   irregularEvents: IrregularEvent[]
+  incomes: Income[]
 
   // 固定費
   addFixedCost: (cost: Omit<FixedCost, 'id'>, id?: string) => void
@@ -46,6 +48,11 @@ interface CostStore {
   addIrregularEvent: (event: Omit<IrregularEvent, 'id'>) => void
   updateIrregularEvent: (id: string, event: Omit<IrregularEvent, 'id'>) => void
   removeIrregularEvent: (id: string) => void
+
+  // 収入
+  addIncome: (income: Omit<Income, 'id'>) => void
+  updateIncome: (id: string, income: Omit<Income, 'id'>) => void
+  removeIncome: (id: string) => void
 }
 
 export const useCostStore = create<CostStore>()(
@@ -56,6 +63,7 @@ export const useCostStore = create<CostStore>()(
       monthlyEvents: [],
       annualEvents: [],
       irregularEvents: [],
+      incomes: [],
 
       addFixedCost: (cost, id) =>
         set((s) => ({ fixedCosts: [...s.fixedCosts, { ...cost, id: id ?? uuidv4() }] })),
@@ -122,17 +130,29 @@ export const useCostStore = create<CostStore>()(
         })),
       removeIrregularEvent: (id) =>
         set((s) => ({ irregularEvents: s.irregularEvents.filter((e) => e.id !== id) })),
+
+      addIncome: (income) =>
+        set((s) => ({ incomes: [...s.incomes, { ...income, id: uuidv4() }] })),
+      updateIncome: (id, income) =>
+        set((s) => ({
+          incomes: s.incomes.map((i) => (i.id === id ? { ...income, id } : i)),
+        })),
+      removeIncome: (id) =>
+        set((s) => ({ incomes: s.incomes.filter((i) => i.id !== id) })),
     }),
     {
       name: 'life-cost-simulator',
-      version: 3,
+      version: 4,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<CostStore>
         if (version < 2) {
           return { ...state, schedules: DEFAULT_SCHEDULES }
         }
         // v3: Activity に billingFrequency / category / linkedFixedCostId を追加
-        // 既存データはデフォルト値（undefined）のまま互換動作
+        // v4: incomes を追加
+        if (version < 4) {
+          return { ...state, incomes: [] }
+        }
         return state
       },
     }

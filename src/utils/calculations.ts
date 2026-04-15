@@ -1,4 +1,4 @@
-import type { FixedCost, DaySchedule, MonthlyEvent, AnnualEvent, IrregularEvent } from '../types'
+import type { FixedCost, DaySchedule, MonthlyEvent, AnnualEvent, IrregularEvent, Income } from '../types'
 
 /** 固定費の月額換算（weekly 対応） */
 export function calcFixedCostMonthly(costs: FixedCost[]): number {
@@ -38,6 +38,16 @@ export function calcIrregularEventsMonthly(events: IrregularEvent[]): number {
   return events.reduce((sum, e) => sum + e.costPerOccurrence / e.intervalMonths, 0)
 }
 
+/** 収入の月額換算 */
+export function calcIncomeMonthly(incomes: Income[]): number {
+  return incomes.reduce((sum, i) => {
+    if (i.frequency === 'monthly') return sum + i.amount
+    if (i.frequency === 'yearly')  return sum + i.amount / 12
+    if (i.frequency === 'specific_month') return sum + i.amount / 12
+    return sum
+  }, 0)
+}
+
 export interface MonthlySummary {
   fixedCosts: number
   weekly: number
@@ -45,6 +55,8 @@ export interface MonthlySummary {
   annualEvents: number
   irregularEvents: number
   total: number
+  income: number
+  balance: number
 }
 
 export function calcMonthlySummary(
@@ -52,20 +64,25 @@ export function calcMonthlySummary(
   schedules: DaySchedule[],
   monthlyEvents: MonthlyEvent[],
   annualEvents: AnnualEvent[],
-  irregularEvents: IrregularEvent[]
+  irregularEvents: IrregularEvent[],
+  incomes: Income[] = []
 ): MonthlySummary {
   const fixed = calcFixedCostMonthly(fixedCosts)
   const weekly = calcWeeklyMonthly(schedules)
   const monthly = calcMonthlyEventsMonthly(monthlyEvents)
   const annual = calcAnnualEventsMonthly(annualEvents)
   const irregular = calcIrregularEventsMonthly(irregularEvents)
+  const total = fixed + weekly + monthly + annual + irregular
+  const income = calcIncomeMonthly(incomes)
   return {
     fixedCosts: fixed,
     weekly,
     monthlyEvents: monthly,
     annualEvents: annual,
     irregularEvents: irregular,
-    total: fixed + weekly + monthly + annual + irregular,
+    total,
+    income,
+    balance: income - total,
   }
 }
 
