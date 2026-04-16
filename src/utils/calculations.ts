@@ -43,7 +43,11 @@ export function calcIncomeMonthly(incomes: Income[]): number {
   return incomes.reduce((sum, i) => {
     if (i.frequency === 'monthly') return sum + i.amount
     if (i.frequency === 'yearly')  return sum + i.amount / 12
-    if (i.frequency === 'specific_month') return sum + i.amount / 12
+    if (i.frequency === 'specific_month') {
+      // months 配列（新形式）または旧 month フィールドを使用
+      const monthCount = i.months?.length ?? (i.month ? 1 : 1)
+      return sum + (i.amount * monthCount) / 12
+    }
     return sum
   }, 0)
 }

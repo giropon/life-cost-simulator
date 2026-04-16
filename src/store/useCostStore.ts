@@ -142,7 +142,7 @@ export const useCostStore = create<CostStore>()(
     }),
     {
       name: 'life-cost-simulator',
-      version: 4,
+      version: 5,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<CostStore>
         if (version < 2) {
@@ -152,6 +152,18 @@ export const useCostStore = create<CostStore>()(
         // v4: incomes を追加
         if (version < 4) {
           return { ...state, incomes: [] }
+        }
+        // v5: Income.month (単一) を months (配列) に移行
+        if (version < 5) {
+          const oldIncomes = ((state as Partial<CostStore>).incomes ?? []) as Array<Income & { month?: number }>
+          return {
+            ...state,
+            incomes: oldIncomes.map((i) => ({
+              ...i,
+              months: i.months ?? (i.month != null ? [i.month] : []),
+              month: undefined,
+            })),
+          }
         }
         return state
       },

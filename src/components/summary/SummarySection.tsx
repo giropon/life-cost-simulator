@@ -136,7 +136,7 @@ export default function SummarySection() {
             </ul>
           </div>
 
-          <CostBreakdownChart summary={summary} monthlyBreakdown={breakdown} />
+          <CostBreakdownChart summary={summary} monthlyBreakdown={breakdown} fixedCosts={fixedCosts} />
 
           {/* 参考情報 */}
           <div className="bg-slate-50 rounded-xl p-4 text-xs text-slate-500 space-y-1">

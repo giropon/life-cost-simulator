@@ -22,7 +22,7 @@ const BILLING_OPTIONS: { value: BillingFrequency; label: string }[] = [
   { value: '年',  label: '年ごと' },
 ]
 
-type ApplyMode = 'single' | 'all' | 'weekdays'
+type ApplyMode = 'single' | 'all' | 'weekdays' | 'weekends'
 
 interface Props {
   dayOfWeek: number
@@ -43,9 +43,12 @@ export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, 
   const [billingFreq, setBillingFreq]     = useState<BillingFrequency>(initial?.billingFrequency ?? '1回')
   const [category, setCategory]           = useState(initial?.category ?? 'その他')
 
+  // 土日判定
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+
   const isRecurring = billingFreq !== '1回'
 
-  const toggleApplyMode = (mode: 'all' | 'weekdays') =>
+  const toggleApplyMode = (mode: 'all' | 'weekdays' | 'weekends') =>
     setApplyMode((prev) => (prev === mode ? 'single' : mode))
 
   const currentStartSlot = initial ? localStartSlot : startSlot
@@ -61,13 +64,16 @@ export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
+    // 費用未入力は 0 として扱う
+    const costValue = cost === '' ? 0 : Number(cost)
+
     // ── FixedCost の作成 / 更新 / 削除 ──
     let linkedFixedCostId = initial?.linkedFixedCostId
 
     if (isRecurring) {
       const fcPayload = {
         name,
-        amount: Number(cost),
+        amount: costValue,
         frequency: toFcFrequency(billingFreq),
         category,
         source: 'activity' as const,
@@ -88,7 +94,7 @@ export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, 
 
     const data: Omit<Activity, 'id'> = {
       name,
-      costPerOccurrence: Number(cost),
+      costPerOccurrence: costValue,
       startSlot: currentStartSlot,
       durationSlots,
       billingFrequency: billingFreq,
@@ -100,20 +106,39 @@ export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, 
       updateActivity(dayOfWeek, initial.id, data)
       // 編集時の適用範囲（他の曜日に同じデータを追加）
       if (applyMode !== 'single') {
-        const otherDays = (applyMode === 'all' ? [0,1,2,3,4,5,6] : [1,2,3,4,5])
-          .filter(d => d !== dayOfWeek)
-        otherDays.forEach(d => addActivity(d, data))
+        const otherDays =
+          applyMode === 'all'      ? [0,1,2,3,4,5,6] :
+          applyMode === 'weekdays' ? [1,2,3,4,5] :
+                                     [0,6]
+        otherDays.filter(d => d !== dayOfWeek).forEach(d => addActivity(d, data))
       }
     } else {
       const targetDays =
         applyMode === 'all'      ? [0,1,2,3,4,5,6] :
         applyMode === 'weekdays' ? [1,2,3,4,5] :
+        applyMode === 'weekends' ? [0,6] :
                                    [dayOfWeek]
       targetDays.forEach(d => addActivity(d, data))
     }
 
     onClose()
   }
+
+  // 適用ボタン設定（平日用と土日用を切り替え）
+  const applyButtons: { mode: 'all' | 'weekdays' | 'weekends'; label: string }[] = isWeekend
+    ? [
+        { mode: 'all',      label: '毎日に適用' },
+        { mode: 'weekends', label: '土日のみ適用' },
+      ]
+    : [
+        { mode: 'all',      label: '毎日に適用' },
+        { mode: 'weekdays', label: '平日のみ適用' },
+      ]
+
+  const applyModeDescription =
+    applyMode === 'all'      ? '全曜日（日〜土）' :
+    applyMode === 'weekdays' ? '月〜金' :
+    applyMode === 'weekends' ? '土・日' : null
 
   return (
     <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-indigo-200 shadow-lg p-4 space-y-3">
@@ -167,10 +192,7 @@ export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, 
         <div>
           <label className="text-xs text-slate-500 mb-1.5 block">適用範囲</label>
           <div className="flex gap-2">
-            {([
-              { mode: 'all',      label: '毎日に適用' },
-              { mode: 'weekdays', label: '平日のみ適用' },
-            ] as const).map(({ mode, label }) => (
+            {applyButtons.map(({ mode, label }) => (
               <button
                 key={mode}
                 type="button"
@@ -185,9 +207,9 @@ export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, 
               </button>
             ))}
           </div>
-          {applyMode !== 'single' && (
+          {applyModeDescription && (
             <p className="text-xs text-indigo-500 mt-1">
-              {applyMode === 'all' ? '全曜日（日〜土）' : '月〜金'}に同じタスクを
+              {applyModeDescription}に同じタスクを
               {initial ? '追加します（現在の曜日は更新）' : '登録します'}
             </p>
           )}
@@ -198,12 +220,11 @@ export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, 
           <div>
             <label className="text-xs text-slate-500 mb-1 block">費用（円）</label>
             <input
-              required
               type="number"
               min="0"
               value={cost}
               onChange={(e) => setCost(e.target.value)}
-              placeholder="例: 800"
+              placeholder="未入力の場合は¥0"
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
             />
           </div>
@@ -235,7 +256,7 @@ export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, 
               ))}
             </select>
             <p className="text-xs text-amber-600 mt-1">
-              「固定費」タブに <strong>{billingFreq}ごと ¥{Number(cost).toLocaleString()}</strong> として自動登録されます
+              「固定費」タブに <strong>{billingFreq}ごと ¥{(cost === '' ? 0 : Number(cost)).toLocaleString()}</strong> として自動登録されます
             </p>
           </div>
         )}

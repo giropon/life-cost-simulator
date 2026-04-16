@@ -1,4 +1,13 @@
 import { useState } from 'react'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts'
 import { useCostStore } from '../../store/useCostStore'
 import { formatYen } from '../../utils/calculations'
 import type { FixedCost } from '../../types'
@@ -26,21 +35,29 @@ function FreqDisplay({ c }: { c: FixedCost }) {
   )
 }
 
+function toMonthly(c: FixedCost): number {
+  if (c.frequency === 'monthly') return c.amount
+  if (c.frequency === 'yearly')  return c.amount / 12
+  return c.amount * (52 / 12)
+}
+
 export default function FixedCostSection() {
   const { fixedCosts, removeFixedCost } = useCostStore()
   const [editing, setEditing]   = useState<FixedCost | null>(null)
   const [showForm, setShowForm] = useState(false)
 
-  const monthly = fixedCosts.reduce((s, c) => {
-    if (c.frequency === 'monthly') return s + c.amount
-    if (c.frequency === 'yearly')  return s + c.amount / 12
-    return s + c.amount * (52 / 12) // weekly
-  }, 0)
+  const monthly = fixedCosts.reduce((s, c) => s + toMonthly(c), 0)
 
   const grouped = fixedCosts.reduce<Record<string, FixedCost[]>>((acc, c) => {
     const cat = c.category || 'その他'
     return { ...acc, [cat]: [...(acc[cat] || []), c] }
   }, {})
+
+  // カテゴリ別月額合計（グラフ用）
+  const chartData = Object.entries(grouped).map(([cat, items]) => ({
+    name: cat,
+    amount: Math.round(items.reduce((s, c) => s + toMonthly(c), 0)),
+  })).sort((a, b) => b.amount - a.amount)
 
   return (
     <div className="p-4 max-w-2xl mx-auto space-y-4">
@@ -73,8 +90,11 @@ export default function FixedCostSection() {
         <>
           {Object.entries(grouped).map(([cat, items]) => (
             <div key={cat} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
+              <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{cat}</span>
+                <span className="text-xs text-slate-400">
+                  月額: {formatYen(Math.round(items.reduce((s, c) => s + toMonthly(c), 0)))}
+                </span>
               </div>
               <ul className="divide-y divide-slate-100">
                 {items.map((c) => (
@@ -116,6 +136,30 @@ export default function FixedCostSection() {
             <span className="text-sm font-medium text-indigo-700">固定費合計（月額換算）</span>
             <span className="text-lg font-bold text-indigo-700">{formatYen(monthly)}</span>
           </div>
+
+          {/* カテゴリ別グラフ */}
+          {chartData.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-4">カテゴリ別月額内訳</h3>
+              <ResponsiveContainer width="100%" height={chartData.length * 44 + 20}>
+                <BarChart
+                  data={chartData}
+                  layout="vertical"
+                  margin={{ top: 0, right: 16, left: 8, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    tickFormatter={(v) => `¥${(v / 10000).toFixed(0)}万`}
+                    tick={{ fontSize: 11 }}
+                  />
+                  <YAxis type="category" dataKey="name" width={72} tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(value) => formatYen(Number(value))} />
+                  <Bar dataKey="amount" fill="#6366f1" radius={[0, 4, 4, 0]} label={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </>
       )}
     </div>

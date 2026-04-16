@@ -59,7 +59,9 @@ export interface Income {
   amount: number
   /** monthly: 毎月, yearly: 毎年, specific_month: 指定月 */
   frequency: 'monthly' | 'yearly' | 'specific_month'
-  /** frequency が 'specific_month' のときの月 (1-12) */
+  /** frequency が 'specific_month' のときの月リスト (1-12) */
+  months?: number[]
+  /** @deprecated v5 以降は months を使用 */
   month?: number
 }
 

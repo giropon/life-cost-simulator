@@ -1,4 +1,14 @@
 import { useState } from 'react'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from 'recharts'
 import { useCostStore } from '../../store/useCostStore'
 import { calcIncomeMonthly, formatYen } from '../../utils/calculations'
 import type { Income } from '../../types'
@@ -10,16 +20,28 @@ const FREQ_LABEL: Record<Income['frequency'], string> = {
   specific_month: '指定月',
 }
 
-function IncomeDisplay({ income }: { income: Income }) {
-  const monthly =
-    income.frequency === 'monthly' ? income.amount :
-    income.frequency === 'yearly'  ? income.amount / 12 :
-    income.amount / 12  // specific_month
+const BAR_COLORS = ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#059669', '#047857', '#065f46']
 
-  const freqText =
-    income.frequency === 'specific_month' && income.month
-      ? `${income.month}月`
-      : FREQ_LABEL[income.frequency]
+function incomeMonthly(income: Income): number {
+  if (income.frequency === 'monthly') return income.amount
+  if (income.frequency === 'yearly')  return income.amount / 12
+  // specific_month: months配列 or 旧month
+  const monthCount = income.months?.length ?? (income.month ? 1 : 1)
+  return (income.amount * monthCount) / 12
+}
+
+function IncomeDisplay({ income }: { income: Income }) {
+  const monthly = incomeMonthly(income)
+
+  let freqText: string
+  if (income.frequency === 'specific_month') {
+    const months = income.months ?? (income.month ? [income.month] : [])
+    freqText = months.length > 0
+      ? months.map((m) => `${m}月`).join('・')
+      : '指定月'
+  } else {
+    freqText = FREQ_LABEL[income.frequency]
+  }
 
   return (
     <p className="text-xs text-slate-500">
@@ -37,6 +59,12 @@ export default function IncomeSection() {
   const [showForm, setShowForm] = useState(false)
 
   const monthly = calcIncomeMonthly(incomes)
+
+  // グラフ用データ（月額換算）
+  const chartData = incomes.map((i) => ({
+    name: i.name,
+    amount: Math.round(incomeMonthly(i)),
+  })).sort((a, b) => b.amount - a.amount)
 
   return (
     <div className="p-4 max-w-2xl mx-auto space-y-4">
@@ -98,6 +126,34 @@ export default function IncomeSection() {
             <span className="text-sm font-medium text-emerald-700">収入合計（月額換算）</span>
             <span className="text-lg font-bold text-emerald-700">{formatYen(monthly)}</span>
           </div>
+
+          {/* 収入項目別グラフ */}
+          {chartData.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-4">収入項目別月額内訳</h3>
+              <ResponsiveContainer width="100%" height={chartData.length * 44 + 20}>
+                <BarChart
+                  data={chartData}
+                  layout="vertical"
+                  margin={{ top: 0, right: 16, left: 8, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    tickFormatter={(v) => `¥${(v / 10000).toFixed(0)}万`}
+                    tick={{ fontSize: 11 }}
+                  />
+                  <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(value) => formatYen(Number(value))} />
+                  <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
+                    {chartData.map((_, index) => (
+                      <Cell key={index} fill={BAR_COLORS[index % BAR_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </>
       )}
     </div>
