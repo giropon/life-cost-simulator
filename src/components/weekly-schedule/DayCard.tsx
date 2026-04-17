@@ -136,7 +136,14 @@ export default function DayCard({ dayOfWeek }: Props) {
   // グループキー → 前面タスクID
   const [foregroundIds, setForegroundIds] = useState<Record<string, string>>({})
 
-  const dayTotal = day.activities.reduce((s, a) => s + a.costPerOccurrence, 0)
+  function toDailyCost(a: Activity): number {
+    if (!a.billingFrequency || a.billingFrequency === '1回') return a.costPerOccurrence
+    if (a.billingFrequency === '月') return a.costPerOccurrence / 30
+    if (a.billingFrequency === '週') return a.costPerOccurrence / 7
+    if (a.billingFrequency === '年') return a.costPerOccurrence / 365
+    return a.costPerOccurrence
+  }
+  const dayTotal = day.activities.reduce((s, a) => s + toDailyCost(a), 0)
 
   // 常に全タスクでグループ計算（ドラッグ中でも前面状態を保持）
   const overlapGroups = getOverlapGroups(day.activities)

@@ -13,6 +13,8 @@ import { formatYen } from '../../utils/calculations'
 import type { FixedCost } from '../../types'
 import FixedCostForm from './FixedCostForm'
 
+const ITEM_COLORS = ['#6366f1', '#22d3ee', '#f59e0b', '#10b981', '#f43f5e', '#8b5cf6', '#f97316', '#14b8a6', '#ec4899', '#84cc16']
+
 const FREQ_LABEL: Record<string, string> = {
   weekly:  '週',
   monthly: '月',
@@ -53,11 +55,37 @@ export default function FixedCostSection() {
     return { ...acc, [cat]: [...(acc[cat] || []), c] }
   }, {})
 
-  // カテゴリ別月額合計（グラフ用）
-  const chartData = Object.entries(grouped).map(([cat, items]) => ({
-    name: cat,
-    amount: Math.round(items.reduce((s, c) => s + toMonthly(c), 0)),
-  })).sort((a, b) => b.amount - a.amount)
+  // 項目ごとに色を割り当て
+  const itemColorMap = new Map(
+    fixedCosts.map((c, i) => [c.id, ITEM_COLORS[i % ITEM_COLORS.length]])
+  )
+
+  // カテゴリ別・積み上げグラフ用データ（1行=1カテゴリ、各項目IDをキーに）
+  const chartData = Object.entries(grouped)
+    .map(([cat, items]) => {
+      const row: Record<string, number | string> = { name: cat }
+      fixedCosts.forEach(c => {
+        const match = items.find(i => i.id === c.id)
+        row[c.id] = match ? Math.round(toMonthly(match)) : 0
+      })
+      row.categoryTotal = Math.round(items.reduce((s, c) => s + toMonthly(c), 0))
+      return row
+    })
+    .sort((a, b) => (b.categoryTotal as number) - (a.categoryTotal as number))
+
+  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { dataKey: string; value: number; name: string }[]; label?: string }) => {
+    if (!active || !payload?.length) return null
+    const entries = payload.filter(p => p.value > 0)
+    const total = entries.reduce((s, p) => s + p.value, 0)
+    return (
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 12 }}>
+        <p style={{ fontWeight: 600, marginBottom: 4 }}>{label} 合計: {formatYen(total)}</p>
+        {entries.map(p => (
+          <p key={p.dataKey} style={{ color: '#475569', marginBottom: 2 }}>{p.name}: {formatYen(p.value)}</p>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="p-4 max-w-2xl mx-auto space-y-4">
@@ -140,22 +168,31 @@ export default function FixedCostSection() {
           {/* カテゴリ別グラフ */}
           {chartData.length > 0 && (
             <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <h3 className="text-sm font-semibold text-slate-700 mb-4">カテゴリ別月額内訳</h3>
+              <h3 className="text-sm font-semibold text-slate-700 mb-4">項目別月額内訳</h3>
               <ResponsiveContainer width="100%" height={chartData.length * 44 + 20}>
                 <BarChart
                   data={chartData}
                   layout="vertical"
                   margin={{ top: 0, right: 16, left: 8, bottom: 0 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                  <CartesianGrid strokeDasharray="4 3" stroke="#cbd5e1" strokeWidth={1} horizontal={false} />
                   <XAxis
                     type="number"
                     tickFormatter={(v) => `¥${(v / 10000).toFixed(0)}万`}
                     tick={{ fontSize: 11 }}
                   />
                   <YAxis type="category" dataKey="name" width={72} tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(value) => formatYen(Number(value))} />
-                  <Bar dataKey="amount" fill="#6366f1" radius={[0, 4, 4, 0]} label={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  {fixedCosts.map((c, i) => (
+                    <Bar
+                      key={c.id}
+                      dataKey={c.id}
+                      stackId="a"
+                      fill={itemColorMap.get(c.id)}
+                      name={c.name}
+                      radius={i === fixedCosts.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
+                    />
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
             </div>
