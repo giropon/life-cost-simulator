@@ -3,6 +3,7 @@ import { useCostStore } from '../../store/useCostStore'
 import { calcWeeklyMonthly, formatYen } from '../../utils/calculations'
 import { DAY_NAMES } from '../../types'
 import DayCard from './DayCard'
+import WeeklyOverviewModal from './WeeklyOverviewModal'
 
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const  // 月〜日の順
 
@@ -14,6 +15,7 @@ const DAY_COLORS: Record<number, string> = {
 export default function WeeklyScheduleSection() {
   const { schedules } = useCostStore()
   const [selectedDay, setSelectedDay] = useState<number>(1)
+  const [showOverview, setShowOverview] = useState(false)
   const monthly = calcWeeklyMonthly(schedules)
 
   const selectedSchedule = schedules.find((d) => d.dayOfWeek === selectedDay)
@@ -55,8 +57,18 @@ export default function WeeklyScheduleSection() {
               </button>
             )
           })}
+          {/* 週間一覧ボタン */}
+          <button
+            onClick={() => setShowOverview(true)}
+            className="flex-shrink-0 px-2.5 py-2.5 text-center border-l border-slate-200 hover:bg-slate-50 transition-colors border-b-2 border-transparent"
+            title="週間一覧を表示"
+          >
+            <span className="text-xs text-slate-500 font-medium whitespace-nowrap">一覧</span>
+          </button>
         </div>
       </div>
+
+      {showOverview && <WeeklyOverviewModal onClose={() => setShowOverview(false)} />}
 
       {/* タイムライン */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
