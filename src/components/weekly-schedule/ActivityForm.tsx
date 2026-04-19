@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { useCostStore } from '../../store/useCostStore'
-import { slotToTimeStr, TOTAL_SLOTS, FIXED_COST_CATEGORIES } from '../../types'
+import { slotToTimeStr, TOTAL_SLOTS, FIXED_COST_CATEGORIES, DAY_NAMES } from '../../types'
 import type { Activity, BillingFrequency } from '../../types'
 
 const DURATION_OPTIONS = [
@@ -22,7 +22,8 @@ const BILLING_OPTIONS: { value: BillingFrequency; label: string }[] = [
   { value: '年',  label: '年ごと' },
 ]
 
-type ApplyMode = 'single' | 'all' | 'weekdays' | 'weekends'
+// 表示順: 月〜日
+const DAY_ORDER_DISPLAY = [1, 2, 3, 4, 5, 6, 0] as const
 
 interface Props {
   dayOfWeek: number
@@ -33,23 +34,39 @@ interface Props {
 }
 
 export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, initial, onClose }: Props) {
-  const { addActivity, updateActivity, removeActivity, addFixedCost, updateFixedCost, removeFixedCost, fixedCosts } = useCostStore()
+  const { addActivity, updateActivity, removeActivity, addFixedCost, updateFixedCost, removeFixedCost, fixedCosts, schedules } = useCostStore()
 
   const [name, setName]                   = useState(initial?.name ?? '')
   const [cost, setCost]                   = useState(String(initial?.costPerOccurrence ?? ''))
   const [localStartSlot, setLocalStartSlot] = useState(initial?.startSlot ?? startSlot)
   const [durationSlots, setDurationSlots] = useState(initial?.durationSlots ?? 2)
-  const [applyMode, setApplyMode]         = useState<ApplyMode>('single')
   const [billingFreq, setBillingFreq]     = useState<BillingFrequency>(initial?.billingFrequency ?? '1回')
   const [category, setCategory]           = useState(initial?.category ?? 'その他')
 
-  // 土日判定
-  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+  // 適用曜日（現在の曜日は常に含む）
+  const [selectedDays, setSelectedDays]   = useState<Set<number>>(() => new Set([dayOfWeek]))
+  // 編集時: 他曜日も一括編集
+  const [bulkEdit, setBulkEdit]           = useState(false)
 
   const isRecurring = billingFreq !== '1回'
 
-  const toggleApplyMode = (mode: 'all' | 'weekdays' | 'weekends') =>
-    setApplyMode((prev) => (prev === mode ? 'single' : mode))
+  const toggleDay = (d: number) => {
+    if (d === dayOfWeek) return
+    setSelectedDays(prev => {
+      const next = new Set(prev)
+      if (next.has(d)) next.delete(d)
+      else next.add(d)
+      return next
+    })
+  }
+
+  const applyPreset = (preset: 'all' | 'weekdays' | 'weekends') => {
+    const days =
+      preset === 'all'      ? [0, 1, 2, 3, 4, 5, 6] :
+      preset === 'weekdays' ? [1, 2, 3, 4, 5] :
+                              [0, 6]
+    setSelectedDays(new Set(days))
+  }
 
   const currentStartSlot = initial ? localStartSlot : startSlot
   const handleStartSlotChange = (val: number) => {
@@ -57,17 +74,14 @@ export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, 
     else onStartSlotChange?.(val)
   }
 
-  // billingFrequency → FixedCost.frequency のマッピング
   const toFcFrequency = (bf: BillingFrequency) =>
     bf === '年' ? 'yearly' as const : bf === '週' ? 'weekly' as const : 'monthly' as const
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    // 費用未入力は 0 として扱う
     const costValue = cost === '' ? 0 : Number(cost)
 
-    // ── FixedCost の作成 / 更新 / 削除 ──
     let linkedFixedCostId = initial?.linkedFixedCostId
 
     if (isRecurring) {
@@ -79,15 +93,12 @@ export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, 
         source: 'activity' as const,
       }
       if (linkedFixedCostId && fixedCosts.some(fc => fc.id === linkedFixedCostId)) {
-        // 既存リンク先を更新
         updateFixedCost(linkedFixedCostId, fcPayload)
       } else {
-        // 新規作成
         linkedFixedCostId = uuidv4()
         addFixedCost(fcPayload, linkedFixedCostId)
       }
     } else if (linkedFixedCostId) {
-      // 繰り返し → 1回 に変更: リンク先を削除
       removeFixedCost(linkedFixedCostId)
       linkedFixedCostId = undefined
     }
@@ -103,42 +114,47 @@ export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, 
     }
 
     if (initial) {
+      // 現在の曜日を更新
       updateActivity(dayOfWeek, initial.id, data)
-      // 編集時の適用範囲（他の曜日に同じデータを追加）
-      if (applyMode !== 'single') {
-        const otherDays =
-          applyMode === 'all'      ? [0,1,2,3,4,5,6] :
-          applyMode === 'weekdays' ? [1,2,3,4,5] :
-                                     [0,6]
-        otherDays.filter(d => d !== dayOfWeek).forEach(d => addActivity(d, data))
+
+      // 他曜日も一括編集が有効な場合
+      if (bulkEdit) {
+        const otherDays = [...selectedDays].filter(d => d !== dayOfWeek)
+        otherDays.forEach(d => {
+          const daySchedule = schedules.find(s => s.dayOfWeek === d)
+          const matchingAct = daySchedule?.activities.find(a =>
+            a.name === initial.name &&
+            a.startSlot === initial.startSlot &&
+            a.durationSlots === initial.durationSlots &&
+            a.costPerOccurrence === initial.costPerOccurrence
+          )
+          if (matchingAct) {
+            updateActivity(d, matchingAct.id, data)
+          }
+        })
       }
     } else {
-      const targetDays =
-        applyMode === 'all'      ? [0,1,2,3,4,5,6] :
-        applyMode === 'weekdays' ? [1,2,3,4,5] :
-        applyMode === 'weekends' ? [0,6] :
-                                   [dayOfWeek]
+      // 新規追加: 選択した全曜日に追加
+      const targetDays = [...selectedDays]
       targetDays.forEach(d => addActivity(d, data))
     }
 
     onClose()
   }
 
-  // 適用ボタン設定（平日用と土日用を切り替え）
-  const applyButtons: { mode: 'all' | 'weekdays' | 'weekends'; label: string }[] = isWeekend
-    ? [
-        { mode: 'all',      label: '毎日に適用' },
-        { mode: 'weekends', label: '土日のみ適用' },
-      ]
-    : [
-        { mode: 'all',      label: '毎日に適用' },
-        { mode: 'weekdays', label: '平日のみ適用' },
-      ]
-
-  const applyModeDescription =
-    applyMode === 'all'      ? '全曜日（日〜土）' :
-    applyMode === 'weekdays' ? '月〜金' :
-    applyMode === 'weekends' ? '土・日' : null
+  // 編集時: 他曜日で同じタスクが存在するかを確認してハイライト
+  const getDayMatchStatus = (d: number): 'current' | 'match' | 'no-match' => {
+    if (d === dayOfWeek) return 'current'
+    if (!initial) return 'no-match'
+    const daySchedule = schedules.find(s => s.dayOfWeek === d)
+    const hasMatch = daySchedule?.activities.some(a =>
+      a.name === initial.name &&
+      a.startSlot === initial.startSlot &&
+      a.durationSlots === initial.durationSlots &&
+      a.costPerOccurrence === initial.costPerOccurrence
+    ) ?? false
+    return hasMatch ? 'match' : 'no-match'
+  }
 
   return (
     <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-indigo-200 shadow-lg p-4 space-y-3">
@@ -188,29 +204,101 @@ export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, 
           </div>
         </div>
 
-        {/* 適用範囲 */}
+        {/* 適用範囲（新規追加時） / 他曜日一括編集（編集時） */}
         <div>
-          <label className="text-xs text-slate-500 mb-1.5 block">適用範囲</label>
-          <div className="flex gap-2">
-            {applyButtons.map(({ mode, label }) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => toggleApplyMode(mode)}
-                className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${
-                  applyMode === mode
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-xs text-slate-500">
+              {initial ? '他曜日も一括編集' : '適用範囲'}
+            </label>
+            {initial && (
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={bulkEdit}
+                  onChange={(e) => setBulkEdit(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-indigo-600"
+                />
+                <span className="text-xs text-slate-600">他曜日も一括編集</span>
+              </label>
+            )}
           </div>
-          {applyModeDescription && (
-            <p className="text-xs text-indigo-500 mt-1">
-              {applyModeDescription}に同じタスクを
-              {initial ? '追加します（現在の曜日は更新）' : '登録します'}
+
+          {/* クイック選択ボタン */}
+          {(!initial || bulkEdit) && (
+            <div className="flex gap-1.5 mb-2">
+              <button
+                type="button"
+                onClick={() => applyPreset('all')}
+                className="flex-1 py-1 text-xs rounded border border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors"
+              >
+                毎日
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset('weekdays')}
+                className="flex-1 py-1 text-xs rounded border border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors"
+              >
+                平日のみ
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset('weekends')}
+                className="flex-1 py-1 text-xs rounded border border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors"
+              >
+                土日のみ
+              </button>
+            </div>
+          )}
+
+          {/* 曜日チェックボックス */}
+          {(!initial || bulkEdit) && (
+            <div className="flex gap-1">
+              {DAY_ORDER_DISPLAY.map(d => {
+                const matchStatus = getDayMatchStatus(d)
+                const isCurrent = d === dayOfWeek
+                const isChecked = selectedDays.has(d)
+                const hasMatch = initial && matchStatus === 'match'
+
+                return (
+                  <label
+                    key={d}
+                    className={`flex flex-col items-center gap-0.5 flex-1 cursor-pointer ${
+                      isCurrent ? 'cursor-default' : ''
+                    }`}
+                  >
+                    <span className={`text-[10px] font-medium ${
+                      d === 0 ? 'text-red-500' :
+                      d === 6 ? 'text-blue-500' :
+                      'text-slate-600'
+                    }`}>
+                      {DAY_NAMES[d]}
+                    </span>
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleDay(d)}
+                        disabled={isCurrent}
+                        className="w-4 h-4 accent-indigo-600"
+                      />
+                      {initial && hasMatch && !isCurrent && (
+                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full" title="同じタスクが存在" />
+                      )}
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+
+          {initial && bulkEdit && (
+            <p className="text-[10px] text-indigo-500 mt-1">
+              ●は同じタスク（名前・開始時刻・時間・費用が一致）が存在する曜日です
+            </p>
+          )}
+          {!initial && (
+            <p className="text-[10px] text-slate-400 mt-1">
+              チェックした曜日に同じタスクを登録します
             </p>
           )}
         </div>
@@ -267,7 +355,23 @@ export default function ActivityForm({ dayOfWeek, startSlot, onStartSlotChange, 
         {initial && (
           <button
             type="button"
-            onClick={() => { removeActivity(dayOfWeek, initial.id); onClose() }}
+            onClick={() => {
+              removeActivity(dayOfWeek, initial.id)
+              if (bulkEdit) {
+                const otherDays = [...selectedDays].filter(d => d !== dayOfWeek)
+                otherDays.forEach(d => {
+                  const daySchedule = schedules.find(s => s.dayOfWeek === d)
+                  const matchingAct = daySchedule?.activities.find(a =>
+                    a.name === initial.name &&
+                    a.startSlot === initial.startSlot &&
+                    a.durationSlots === initial.durationSlots &&
+                    a.costPerOccurrence === initial.costPerOccurrence
+                  )
+                  if (matchingAct) removeActivity(d, matchingAct.id)
+                })
+              }
+              onClose()
+            }}
             className="px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors"
           >
             削除
